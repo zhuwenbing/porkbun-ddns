@@ -49,7 +49,7 @@ Tips:
 ```bash
 # e.g.
 # Run every five minutes
-*/5 * * * * /usr/bin/porkbun_ddns.sh > /dev/null 2>&1
+*/5 * * * * porkbun-ddns.sh -ak pk1_jeldvj74ql06qq81rfx7jqsaubno867q4zp3b2fi06pw2bns81innur6p0oq3n7s -sk sk1_kfkcxsgne1i8qm4mr8va8t9e8f5ezpw8fsin35uh8jjqwhgsfb7571y2wq3shdgx -h domain1.tld -h subdomain.domain1.tld -h subdomain.domain2.tld
 ```
 
 ### Changelog:
