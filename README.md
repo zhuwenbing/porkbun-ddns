@@ -7,6 +7,7 @@ The `porkbun_ddns.sh` is a command-line tool for Porkbun DDNS (Dynamic Domain Na
 2. Supports both IPv4 and IPv6.
 3. Unlike other scripts, this script can still obtain the real IP in the proxy environment.
 4. Can theoretically run on most computers or routers.
+5. Execute according to IP changes, less calls to Porkbun's API.
 
 ### Usage:
 1. Download the shell script then upload it to a folder on your computer or router, e.g. `/usr/bin`.
