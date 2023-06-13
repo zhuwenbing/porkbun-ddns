@@ -20,7 +20,7 @@ chmod +x /usr/bin/porkbun_ddns.sh
 ```bash
 porkbun_ddns.sh --help
 
-Porkbun DDNS CLI v1.0.0 (2022.05.20)
+Porkbun DDNS CLI v1.0.1 (2023.06.13)
 Usage: porkbun-ddns.sh <command> ... [parameters ...]
 Commands:
   --help                        Show this help message
@@ -54,7 +54,11 @@ Tips:
 ```
 
 ### Changelog:
-1. 2022/5/20 - Release v1.0.0 version.
+1. 2023/6/13
+  - Release v1.0.1 version
+    - [Fix typos](https://github.com/zhuwenbing/porkbun-ddns/pull/2) (Thanks to [Haarolean](https://github.com/Haarolean)).
+    - [IP_ADDR_V6: unbound variable on host w/o IPv6](https://github.com/zhuwenbing/porkbun-ddns/issues/1).
+2. 2022/5/20 - Release v1.0.0 version.
 
 ### Thanks:
 1. [Mr-Jos/namesilo_ddns_cli](https://github.com/Mr-Jos/namesilo_ddns_cli)

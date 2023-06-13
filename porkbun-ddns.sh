@@ -171,11 +171,11 @@ get_curr_ip() {
     fi
   done
 
-  if [[ ${RES:-NULL} == "NULL" ]]; then
-    return
-  elif [[ $ARG == "-4" && $RES != ${IP_ADDR_V4:-NULL} ]]; then
+  if [[ $ARG == "-4" ]]; then
     IP_ADDR_V4="$RES"
-  elif [[ $ARG == "-6" && $RES != ${IP_ADDR_V6:-NULL} ]]; then
+  fi
+
+  if [[ $ARG == "-6" ]]; then
     IP_ADDR_V6="$RES"
   fi
 }
