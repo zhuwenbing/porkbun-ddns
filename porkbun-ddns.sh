@@ -24,8 +24,8 @@ SECRET_KEY=
 # DNS Edit Record by Domain, Subdomain and Type
 URI_ENDPOINT=https://porkbun.com/api/json/v3/dns/editByNameType
 
-PROJECT="Porkbun DDNS CLI v1.0.0 (2022.05.20)"
-COPYRIGHT="Copyright (c) 2022 Mr.Chu"
+PROJECT="Porkbun DDNS CLI v1.0.1 (2023.06.13)"
+COPYRIGHT="Copyright (c) 2023 Mr.Chu"
 LICENSE="MIT License: <https://opensource.org/licenses/MIT>"
 HELP="Usage: porkbun-ddns.sh <command> ... [parameters ...]
 Commands:
