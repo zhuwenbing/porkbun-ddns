@@ -25,8 +25,8 @@ Usage: porkbun-ddns.sh <command> ... [parameters ...]
 Commands:
   --help                        Show this help message
   --version                     Show version info
-  --api-key, -ak <apikey>       Specify Namesilo API Key
-  --secret-key, -sk <secretkey> Specify Namesilo Secret Key
+  --api-key, -ak <apikey>       Specify Porkbun API Key
+  --secret-key, -sk <secretkey> Specify Porkbun Secret Key
   --host, -h <host>             Add a hostname
 
 Example:
