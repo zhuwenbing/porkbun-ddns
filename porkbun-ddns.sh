@@ -121,31 +121,40 @@ parse_args() {
 }
 
 load_cached_ips() {
-  local TEMP_FILE HOST
+  local HOST
+  declare -A IP_CACHE
+
   # The file used to store these last IPs.
   LAST_IPS_FILE=${0%/*}/lastIPs
-  # Read these last IPs from the above file.
+
+  # Read these last IPs from the above file and populate the IP_CACHE array.
   if [ -f $LAST_IPS_FILE ]; then
-    TEMP_FILE=$(mktemp)
     while IFS= read -r line; do
       HOST=$(echo "$line" | awk '{print $1}')
-      if [[ " ${HOSTS[@]} " =~ " $HOST " ]]; then
-        echo "$line" >>$TEMP_FILE
-      fi
+      IP_CACHE["$HOST"]="$line"
     done <$LAST_IPS_FILE
+
     for HOST in "${HOSTS[@]}"; do
-      if ! grep -q "$HOST" $LAST_IPS_FILE; then
-        echo "$HOST A 1.1.1.1" >>"$TEMP_FILE"
-        echo "$HOST AAAA 2606:4700:4700::1111" >>"$TEMP_FILE"
+      if [ ! -v IP_CACHE["$HOST"] ] || [ -z "${IP_CACHE["$HOST"]}" ]; then
+        echo "$HOST A 1.1.1.1" >>"$LAST_IPS_FILE"
+        echo "$HOST AAAA 2606:4700:4700::1111" >>"$LAST_IPS_FILE"
+      else
+        unset IP_CACHE["$HOST"]
       fi
     done
-    mv "$TEMP_FILE" "$LAST_IPS_FILE"
+
+    # for key in "${!IP_CACHE[@]}"; do
+      # echo "Key: $key, Value: ${IP_CACHE[$key]}"
+    # done
+
+    # Remove obsolete entries from the file
+    for HOST in "${!IP_CACHE[@]}"; do
+      sed -i "/^$HOST /d" "$LAST_IPS_FILE"
+    done
   else
     for HOST in "${HOSTS[@]}"; do
-      cat <<EOF >>$LAST_IPS_FILE
-$HOST A 1.1.1.1
-$HOST AAAA 2606:4700:4700::1111
-EOF
+      echo "$HOST A 1.1.1.1" >>"$LAST_IPS_FILE"
+      echo "$HOST AAAA 2606:4700:4700::1111" >>"$LAST_IPS_FILE"
     done
   fi
 }
@@ -198,11 +207,16 @@ get_curr_ip() {
 }
 
 update_record() {
-  local STATUS MAX_RETRIES RETRY_COUNT DOMAIN SUBDOMAIN TYPE IP_ADDR
-  DOMAIN=$1
-  SUBDOMAIN=$2
-  TYPE=$3
-  IP_ADDR=$4
+  local STATUS MAX_RETRIES RETRY_COUNT HOST DOMAIN SUBDOMAIN TYPE IP_ADDR
+
+  HOST=$1
+  DOMAIN=$(echo $HOST | awk -F '.' '{ print $(NF-1)"."$NF }')
+  # Subdomain is optional, it may be empty.
+  SUBDOMAIN=$(echo ${HOST%$DOMAIN*} | sed 's/\(.*\)\..*/\1/')
+  # echo "Subdomain -> $SUBDOMAIN  Domain -> $DOMAIN"
+
+  TYPE=$2
+  IP_ADDR=$3
 
   STATUS=""
   MAX_RETRIES=3
@@ -218,26 +232,10 @@ update_record() {
   done
 
   if [[ $STATUS == "SUCCESS" ]]; then
-    temp_file=$(mktemp)
-    awk -v domain="$DOMAIN" -v type="$TYPE" -v new_ip="$IP_ADDR" '
-{
-  if ($1 == domain && $2 == type) {
-    $3 = new_ip;
-  }
-  print $0;
-}' $LAST_IPS_FILE >$temp_file
-    mv $temp_file $LAST_IPS_FILE
-    if [ -z "$SUBDOMAIN" ]; then
-      echo "The $TYPE of '$DOMAIN' has been successfully updated to $IP_ADDR!"
-    else
-      echo "The $TYPE of '$SUBDOMAIN.$DOMAIN' has been successfully updated to $IP_ADDR!"
-    fi
+    sed -i "/^$HOST $TYPE /s/[^ ]*$/$IP_ADDR/g" "$LAST_IPS_FILE"
+    echo "The $TYPE of '$HOST' has been successfully updated to $IP_ADDR!"
   else
-    if [ -z "$SUBDOMAIN" ]; then
-      echo "The $TYPE update of '$DOMAIN' has failed!"
-    else
-      echo "The $TYPE update of '$SUBDOMAIN.$DOMAIN' has failed!"
-    fi
+    echo "The $TYPE update of '$HOST' has failed!"
   fi
 }
 
@@ -259,15 +257,10 @@ update_records() {
       continue
     fi
 
-    DOMAIN=$(echo $HOST | awk -F '.' '{ print $(NF-1)"."$NF }')
-    # Subdomain is optional, it may be empty.
-    SUBDOMAIN=$(echo ${HOST%$DOMAIN*} | sed 's/\(.*\)\..*/\1/')
-    # echo "Subdomain -> $SUBDOMAIN  Domain -> $DOMAIN"
-
     if [ "$TYPE" = "A" ] && [ "$IP" != "$IP_ADDR_V4" ]; then
-      update_record "$DOMAIN" "$SUBDOMAIN" "$TYPE" "$IP_ADDR_V4"
+      update_record "$HOST" "$TYPE" "$IP_ADDR_V4"
     elif [ "$TYPE" = "AAAA" ] && [ "$IP" != "$IP_ADDR_V6" ]; then
-      update_record "$DOMAIN" "$SUBDOMAIN" "$TYPE" "$IP_ADDR_V6"
+      update_record "$HOST" "$TYPE" "$IP_ADDR_V6"
     fi
   done <$LAST_IPS_FILE
 }
