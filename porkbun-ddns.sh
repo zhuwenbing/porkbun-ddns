@@ -13,8 +13,8 @@ set -euo pipefail
 
 declare -g API_KEY SECRET_KEY URI_ENDPOINT
 declare -g PROJECT COPYRIGHT LICENSE HELP
-declare -g HOSTS LAST_IPS_FILE LAST_IP_V4 LAST_IP_V6
-declare -g IP_ADDR_V4 IP_ADDR_V6 IP_V4_CHANGED IP_V6_CHANGED
+declare -g IP_ADDR_V4 IP_ADDR_V6
+declare -g LAST_IPS_FILE HOSTS
 
 # API Key:
 API_KEY=
@@ -24,7 +24,7 @@ SECRET_KEY=
 # DNS Edit Record by Domain, Subdomain and Type
 URI_ENDPOINT=https://porkbun.com/api/json/v3/dns/editByNameType
 
-PROJECT="Porkbun DDNS CLI v1.0.1 (2023.06.13)"
+PROJECT="Porkbun DDNS CLI v1.0.2 (2023.11.13)"
 COPYRIGHT="Copyright (c) 2023 Mr.Chu"
 LICENSE="MIT License: <https://opensource.org/licenses/MIT>"
 HELP="Usage: porkbun-ddns.sh <command> ... [parameters ...]
@@ -52,57 +52,63 @@ Tips:
   if your DNS records have been updated by other ways.
 "
 
-parse_args() {
+show_help() {
+  echo "${PROJECT:-}"
+  echo "${HELP:-}"
+  exit 0
+}
+
+show_version() {
+  echo "${PROJECT:-}"
+  echo "${COPYRIGHT:-}"
+  echo "${LICENSE:-}"
+  exit 0
+}
+
+check_key() {
   local RE_KEY="^[0-9a-z_]{68}$"
+  if [[ ! $1 =~ $RE_KEY ]]; then
+    echo "Invalid $2: $1"
+    exit 9
+  fi
+}
+
+check_host() {
   local RE_HOST="^([a-zA-Z0-9\-]{1,63}\.)+[a-zA-Z0-9\-]{1,63}$"
+  if [[ ! $1 =~ $RE_HOST ]]; then
+    echo "Invalid host format: $1"
+    exit 9
+  fi
+}
+
+parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --help)
-      echo "${PROJECT:-}"
-      echo "${HELP:-}"
-      exit 0
-      ;;
-    --version)
-      echo "${PROJECT:-}"
-      echo "${COPYRIGHT:-}"
-      echo "${LICENSE:-}"
-      exit 0
-      ;;
+    --help) show_help ;;
+    --version) show_version ;;
     --api-key | -ak)
+      check_key $2 "API Key"
+      API_KEY="$2"
       shift
-      if [[ $1 =~ $RE_KEY ]]; then
-        API_KEY="$1"
-      else
-        echo "Invalid API Key: $1"
-        exit 9
-      fi
       ;;
     --secret-key | -sk)
+      check_key $2 "Secret Key"
+      SECRET_KEY="$2"
       shift
-      if [[ $1 =~ $RE_KEY ]]; then
-        SECRET_KEY="$1"
-      else
-        echo "Invalid Secret Key: $1"
-        exit 9
-      fi
       ;;
     --host | -h)
+      check_host $2
+      HOSTS+=("$2")
       shift
-      if [[ $1 =~ $RE_HOST ]]; then
-        HOSTS+=("$1")
-      else
-        echo "Invalid host format: $1"
-        exit 9
-      fi
       ;;
     esac
     shift
   done
 
-  if [[ ! ${API_KEY:-} =~ $RE_KEY ]]; then
+  if [[ -z ${API_KEY:-} ]]; then
     echo "No valid API Key"
     exit 9
-  elif [[ ! ${SECRET_KEY:-} =~ $RE_KEY ]]; then
+  elif [[ -z ${SECRET_KEY:-} ]]; then
     echo "No valid Secret Key"
     exit 9
   elif [[ -z ${HOSTS[@]} ]]; then
@@ -115,21 +121,32 @@ parse_args() {
 }
 
 load_cached_ips() {
+  local TEMP_FILE HOST
   # The file used to store these last IPs.
   LAST_IPS_FILE=${0%/*}/lastIPs
   # Read these last IPs from the above file.
   if [ -f $LAST_IPS_FILE ]; then
-    while read var value
-    do
-      export "$var"="$value"
-    done < $LAST_IPS_FILE
+    TEMP_FILE=$(mktemp)
+    while IFS= read -r line; do
+      HOST=$(echo "$line" | awk '{print $1}')
+      if [[ " ${HOSTS[@]} " =~ " $HOST " ]]; then
+        echo "$line" >>$TEMP_FILE
+      fi
+    done <$LAST_IPS_FILE
+    for HOST in "${HOSTS[@]}"; do
+      if ! grep -q "$HOST" $LAST_IPS_FILE; then
+        echo "$HOST A 1.1.1.1" >>"$TEMP_FILE"
+        echo "$HOST AAAA 2606:4700:4700::1111" >>"$TEMP_FILE"
+      fi
+    done
+    mv "$TEMP_FILE" "$LAST_IPS_FILE"
   else
-    LAST_IP_V4=1.1.1.1
-    LAST_IP_V6=2606:4700:4700::1111
-    cat <<EOF > $LAST_IPS_FILE
-LAST_IP_V4 $LAST_IP_V4
-LAST_IP_V6 $LAST_IP_V6
+    for HOST in "${HOSTS[@]}"; do
+      cat <<EOF >>$LAST_IPS_FILE
+$HOST A 1.1.1.1
+$HOST AAAA 2606:4700:4700::1111
 EOF
+    done
   fi
 }
 
@@ -137,14 +154,14 @@ get_curr_ip() {
   local ARG POOL RE
   if [[ $1 == "-4" ]]; then
     POOL=(
-      # "dig @1.1.1.1 whoami.cloudflare TXT ch -4 +short | sed 's/\"//g'"
+      "dig @one.one.one.one whoami.cloudflare TXT ch -4 +short | sed 's/\"//g'"
       "dig @ns1.google.com o-o.myaddr.l.google.com TXT -4 +short | sed 's/\"//g'"
       "dig @resolver1.opendns.com myip.opendns.com A -4 +short"
     )
     RE="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
   elif [[ $1 == "-6" ]]; then
     POOL=(
-      # "dig @2606:4700:4700::1111 whoami.cloudflare TXT ch -6 +short | sed 's/\"//g'"
+      "dig @one.one.one.one whoami.cloudflare TXT ch -6 +short | sed 's/\"//g'"
       "dig @ns1.google.com o-o.myaddr.l.google.com TXT -6 +short | sed 's/\"//g'"
       "dig @resolver1.ipv6-sandbox.opendns.com myip.opendns.com AAAA -6 +short"
     )
@@ -180,66 +197,85 @@ get_curr_ip() {
   fi
 }
 
-check_changed() {
-  # See if the IP has changed
-  if [[ $IP_ADDR_V4 == $LAST_IP_V4 ]]; then
-    IP_V4_CHANGED=false
-    echo "Public.IP.Check -- Public IPv4 has not changed."
-  else
-    if [[ ${IP_ADDR_V4:-NULL} != "NULL" ]]; then
-      IP_V4_CHANGED=true
+update_record() {
+  local STATUS MAX_RETRIES RETRY_COUNT DOMAIN SUBDOMAIN TYPE IP_ADDR
+  DOMAIN=$1
+  SUBDOMAIN=$2
+  TYPE=$3
+  IP_ADDR=$4
+
+  STATUS=""
+  MAX_RETRIES=3
+  RETRY_COUNT=0
+  while [[ $STATUS != "SUCCESS" && $RETRY_COUNT -lt $MAX_RETRIES ]]; do
+    STATUS=$(curl -s -X POST "$URI_ENDPOINT/$DOMAIN/$TYPE/$SUBDOMAIN" -H "Content-Type: application/json" --data '{"secretapikey":"'$SECRET_KEY'","apikey":"'$API_KEY'","content": "'$IP_ADDR'","ttl":"300"}' | sed -E 's/.*"status":"?([^,"]*)"?.*/\1/')
+    sleep 3
+    if [[ $STATUS == "SUCCESS" ]]; then
+      break
+    else
+      RETRY_COUNT=$((RETRY_COUNT + 1))
     fi
-  fi
-  if [[ $IP_ADDR_V6 == $LAST_IP_V6 ]]; then
-    IP_V6_CHANGED=false
-    echo "Public.IP.Check -- Public IPv6 has not changed."
+  done
+
+  if [[ $STATUS == "SUCCESS" ]]; then
+    temp_file=$(mktemp)
+    awk -v domain="$DOMAIN" -v type="$TYPE" -v new_ip="$IP_ADDR" '
+{
+  if ($1 == domain && $2 == type) {
+    $3 = new_ip;
+  }
+  print $0;
+}' $LAST_IPS_FILE >$temp_file
+    mv $temp_file $LAST_IPS_FILE
+    if [ -z "$SUBDOMAIN" ]; then
+      echo "The $TYPE of '$DOMAIN' has been successfully updated to $IP_ADDR!"
+    else
+      echo "The $TYPE of '$SUBDOMAIN.$DOMAIN' has been successfully updated to $IP_ADDR!"
+    fi
   else
-    if [[ ${IP_ADDR_V6:-NULL} != "NULL" ]]; then
-      IP_V6_CHANGED=true
+    if [ -z "$SUBDOMAIN" ]; then
+      echo "The $TYPE update of '$DOMAIN' has failed!"
+    else
+      echo "The $TYPE update of '$SUBDOMAIN.$DOMAIN' has failed!"
     fi
   fi
 }
 
 update_records() {
-  local HOST VAR
-  for HOST in "${HOSTS[@]:-}"; do
+  local HOST TYPE IP VAR DOMAIN SUBDOMAIN
+  while IFS= read -r line; do
+    HOST=$(echo "$line" | awk '{print $1}')
+    TYPE=$(echo "$line" | awk '{print $2}')
+    IP=$(echo "$line" | awk '{print $3}')
+
     [[ -z $HOST ]] && continue
     VAR=(${HOST//./ })
     [[ ${#VAR[@]} -lt 2 ]] && continue
-    do_update $HOST
-  done
-}
 
-do_update() {
-  # Domain
-  # Subdomain: optional.
-  local HOST DOMAIN SUBDOMAIN STATUS
-  HOST=$1
-  DOMAIN=$(echo $HOST | awk -F '.' '{ print $(NF-1)"."$NF }')
-  SUBDOMAIN=$(echo ${HOST%$DOMAIN*} | sed 's/\(.*\)\..*/\1/')
-  # echo "Subdomain -> $SUBDOMAIN  Domain -> $DOMAIN"
-  # return
-  if [[ $IP_V4_CHANGED == true ]]; then
-    STATUS=$(curl -s -X POST "$URI_ENDPOINT/$DOMAIN/A/$SUBDOMAIN" -H "Content-Type: application/json" --data '{"secretapikey":"'$SECRET_KEY'","apikey":"'$API_KEY'","content": "'$IP_ADDR_V4'","ttl":"300"}' | sed -E 's/.*"status":"?([^,"]*)"?.*/\1/')
-    if [[ $STATUS == "SUCCESS" ]]; then
-      sed -i "s/$LAST_IP_V4/$IP_ADDR_V4/" $LAST_IPS_FILE
-      echo "Public.IP.Check -- Public IPv4 has changed to $IP_ADDR_V4"
+    if [ "$TYPE" = "A" ] && [ ${IP_ADDR_V4:-NULL} == "NULL" ]; then
+      continue
     fi
-  fi
-  if [[ $IP_V6_CHANGED == true ]]; then
-    STATUS=$(curl -s -X POST "$URI_ENDPOINT/$DOMAIN/AAAA/$SUBDOMAIN" -H "Content-Type: application/json" --data '{"secretapikey":"'$SECRET_KEY'","apikey":"'$API_KEY'","content": "'$IP_ADDR_V6'","ttl":"300"}' | sed -E 's/.*"status":"?([^,"]*)"?.*/\1/')
-    if [[ $STATUS == "SUCCESS" ]]; then
-      sed -i "s/$LAST_IP_V6/$IP_ADDR_V6/" $LAST_IPS_FILE
-      echo "Public.IP.Check -- Public IPv6 has changed to $IP_ADDR_V6"
+    if [ "$TYPE" = "AAAA" ] && [ ${IP_ADDR_V6:-NULL} == "NULL" ]; then
+      continue
     fi
-  fi
+
+    DOMAIN=$(echo $HOST | awk -F '.' '{ print $(NF-1)"."$NF }')
+    # Subdomain is optional, it may be empty.
+    SUBDOMAIN=$(echo ${HOST%$DOMAIN*} | sed 's/\(.*\)\..*/\1/')
+    # echo "Subdomain -> $SUBDOMAIN  Domain -> $DOMAIN"
+
+    if [ "$TYPE" = "A" ] && [ "$IP" != "$IP_ADDR_V4" ]; then
+      update_record "$DOMAIN" "$SUBDOMAIN" "$TYPE" "$IP_ADDR_V4"
+    elif [ "$TYPE" = "AAAA" ] && [ "$IP" != "$IP_ADDR_V6" ]; then
+      update_record "$DOMAIN" "$SUBDOMAIN" "$TYPE" "$IP_ADDR_V6"
+    fi
+  done <$LAST_IPS_FILE
 }
 
 main() {
   load_cached_ips
   get_curr_ip -4
   get_curr_ip -6
-  check_changed
   update_records
 }
 
