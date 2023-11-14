@@ -144,7 +144,7 @@ load_cached_ips() {
     done
 
     # for key in "${!IP_CACHE[@]}"; do
-      # echo "Key: $key, Value: ${IP_CACHE[$key]}"
+    #   echo "Key: $key, Value: ${IP_CACHE[$key]}"
     # done
 
     # Remove obsolete entries from the file
@@ -222,7 +222,7 @@ update_record() {
   MAX_RETRIES=3
   RETRY_COUNT=0
   while [[ $STATUS != "SUCCESS" && $RETRY_COUNT -lt $MAX_RETRIES ]]; do
-    STATUS=$(curl -s -X POST "$URI_ENDPOINT/$DOMAIN/$TYPE/$SUBDOMAIN" -H "Content-Type: application/json" --data '{"secretapikey":"'$SECRET_KEY'","apikey":"'$API_KEY'","content": "'$IP_ADDR'","ttl":"300"}' | sed -E 's/.*"status":"?([^,"]*)"?.*/\1/')
+    STATUS=$(curl -s -X POST "$URI_ENDPOINT/$DOMAIN/$TYPE/$SUBDOMAIN" -H "Content-Type: application/json" --data "{\"secretapikey\":\"${SECRET_KEY}\",\"apikey\":\"${API_KEY}\",\"content\": \"${IP_ADDR}\"}" | sed -E 's/.*"status":"?([^,"]*)"?.*/\1/')
     sleep 3
     if [[ $STATUS == "SUCCESS" ]]; then
       break
