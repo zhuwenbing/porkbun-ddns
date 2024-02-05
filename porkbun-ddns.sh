@@ -15,27 +15,35 @@ declare -g API_KEY SECRET_KEY URI_ENDPOINT
 declare -g PROJECT COPYRIGHT LICENSE HELP
 declare -g IP_ADDR_V4 IP_ADDR_V6
 declare -g LAST_IPS_FILE HOSTS
+declare -a CMD_HOSTS=()
 
 # API Key:
 API_KEY=
 # Secret Key:
 SECRET_KEY=
+
 # URI Endpoint:
 # DNS Edit Record by Domain, Subdomain and Type
 URI_ENDPOINT=https://porkbun.com/api/json/v3/dns/editByNameType
 
-PROJECT="Porkbun DDNS CLI v1.0.2 (2023.11.13)"
+PROJECT="Porkbun DDNS CLI v1.0.3 (2024.2.5)"
 COPYRIGHT="Copyright (c) 2023 Mr.Chu"
 LICENSE="MIT License: <https://opensource.org/licenses/MIT>"
 HELP="Usage: porkbun-ddns.sh <command> ... [parameters ...]
 Commands:
-  --help                        Show this help message
-  --version                     Show version info
-  --api-key, -ak <apikey>       Specify Porkbun API Key
-  --secret-key, -sk <secretkey> Specify Porkbun Secret Key
-  --host, -h <host>             Add a hostname
+  --help                        Show this help message.
+  --version                     Show version info.
+  --api-key, -ak <apikey>       Specify Porkbun API Key.
+  --secret-key, -sk <secretkey> Specify Porkbun Secret Key.
+  --host, -h <host>             Add a hostname.
+  --config-file, -c <filepath>  The path to config file.
 
 Example:
+  # Read parameters from a config file.
+  porkbun-ddns.sh \\
+    -c /etc/porkbun.conf
+
+  # Pass parameters from the command line.
   porkbun-ddns.sh \\
     -ak pk1_jeldvj74ql06qq81rfx7jqsaubno867q4zp3b2fi06pw2bns81innur6p0oq3n7s \\
     -sk sk1_kfkcxsgne1i8qm4mr8va8t9e8f5ezpw8fsin35uh8jjqwhgsfb7571y2wq3shdgx \\
@@ -66,7 +74,7 @@ show_version() {
 }
 
 check_key() {
-  local RE_KEY="^[0-9a-z_]{68}$"
+  local RE_KEY='^[0-9a-z_]{68}$'
   if [[ ! $1 =~ $RE_KEY ]]; then
     echo "Invalid $2: $1"
     exit 9
@@ -74,10 +82,22 @@ check_key() {
 }
 
 check_host() {
-  local RE_HOST="^([a-zA-Z0-9\-]{1,63}\.)+[a-zA-Z0-9\-]{1,63}$"
+  local RE_HOST='^([a-zA-Z0-9\-]{1,63}\.)+[a-zA-Z0-9\-]{1,63}$'
   if [[ ! $1 =~ $RE_HOST ]]; then
     echo "Invalid host format: $1"
     exit 9
+  fi
+}
+
+read_config_file() {
+  if [ -f "$1" ]; then
+    while IFS='=' read -r key value; do
+      case "$key" in
+        apikey) [[ -z ${API_KEY:-} ]] && API_KEY="$value" ;;
+        secretkey) [[ -z ${SECRET_KEY:-} ]] && SECRET_KEY="$value" ;;
+        hosts) IFS=',' read -r -a HOSTS <<< "$value" ;;
+      esac
+    done < "$1"
   fi
 }
 
@@ -98,12 +118,21 @@ parse_args() {
       ;;
     --host | -h)
       check_host $2
-      HOSTS+=("$2")
+      CMD_HOSTS+=("$2")
+      shift
+      ;;
+    --config-file | -c)
+      read_config_file $2
       shift
       ;;
     esac
     shift
   done
+
+  # In this script, we specify that command-line arguments take precedence over parameters in the configuration file.
+  if [[ ${#CMD_HOSTS[@]} -gt 0 ]]; then
+    HOSTS=("${CMD_HOSTS[@]}")
+  fi
 
   if [[ -z ${API_KEY:-} ]]; then
     echo "No valid API Key"
@@ -118,6 +147,14 @@ parse_args() {
     echo "Necessary requirement (curl/dig) does not exist."
     exit 9
   fi
+
+  # echo "Apikey: $API_KEY"
+  # echo "Secretkey: $SECRET_KEY"
+
+  # echo "Hosts:"
+  # for host in "${HOSTS[@]}"; do
+    # echo "  $host"
+  # done
 }
 
 load_cached_ips() {
@@ -163,18 +200,18 @@ get_curr_ip() {
   local ARG POOL RE
   if [[ $1 == "-4" ]]; then
     POOL=(
-      "dig @one.one.one.one whoami.cloudflare TXT ch -4 +short | sed 's/\"//g'"
-      "dig @ns1.google.com o-o.myaddr.l.google.com TXT -4 +short | sed 's/\"//g'"
+      "dig @one.one.one.one whoami.cloudflare TXT ch -4 +short | tr -d '\"'"
+      "dig @ns1.google.com o-o.myaddr.l.google.com TXT -4 +short | tr -d '\"'"
       "dig @resolver1.opendns.com myip.opendns.com A -4 +short"
     )
-    RE="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
+    RE='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
   elif [[ $1 == "-6" ]]; then
     POOL=(
-      "dig @one.one.one.one whoami.cloudflare TXT ch -6 +short | sed 's/\"//g'"
-      "dig @ns1.google.com o-o.myaddr.l.google.com TXT -6 +short | sed 's/\"//g'"
+      "dig @one.one.one.one whoami.cloudflare TXT ch -6 +short | tr -d '\"'"
+      "dig @ns1.google.com o-o.myaddr.l.google.com TXT -6 +short | tr -d '\"'"
       "dig @resolver1.ipv6-sandbox.opendns.com myip.opendns.com AAAA -6 +short"
     )
-    RE="^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{1,4}$"
+    RE='^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{1,4}$'
   else
     return
   fi
@@ -222,7 +259,7 @@ update_record() {
   MAX_RETRIES=3
   RETRY_COUNT=0
   while [[ $STATUS != "SUCCESS" && $RETRY_COUNT -lt $MAX_RETRIES ]]; do
-    STATUS=$(curl -s -X POST "$URI_ENDPOINT/$DOMAIN/$TYPE/$SUBDOMAIN" -H "Content-Type: application/json" --data "{\"secretapikey\":\"${SECRET_KEY}\",\"apikey\":\"${API_KEY}\",\"content\": \"${IP_ADDR}\"}" | sed -E 's/.*"status":"?([^,"]*)"?.*/\1/')
+    STATUS=$(curl -s -X POST "$URI_ENDPOINT/$DOMAIN/$TYPE/$SUBDOMAIN" -H "Content-Type: application/json" --data "{\"secretapikey\":\"${SECRET_KEY}\",\"apikey\":\"${API_KEY}\",\"content\":\"${IP_ADDR}\"}" | sed -E 's/.*"status":"?([^,"]*)"?.*/\1/')
     sleep 3
     if [[ $STATUS == "SUCCESS" ]]; then
       break
@@ -272,6 +309,6 @@ main() {
   update_records
 }
 
-parse_args $*
+parse_args "$@"
 main
 exit 0
