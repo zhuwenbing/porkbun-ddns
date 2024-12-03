@@ -61,18 +61,21 @@ Tips:
 ```
 
 ### Changelog:
-1. 2024/2/5
+1. 2024/12/3
+  - Release v1.0.4 version
+    - Porkbun's endpoint has been changed to 'api.porkbun.com'.
+2. 2024/2/5
   - Release v1.0.3 version
     - Command-line options now support configuration file parameters. You can now add essential script parameters in the configuration file, which will greatly enhance security.
     - Added a configuration sample file.
-2. 2023/11/13
+3. 2023/11/13
   - Release v1.0.2 version
     - See [#3](https://github.com/zhuwenbing/porkbun-ddns/issues/3).
-3. 2023/6/13
+4. 2023/6/13
   - Release v1.0.1 version
     - [Fix typos](https://github.com/zhuwenbing/porkbun-ddns/pull/2) (Thanks to [Haarolean](https://github.com/Haarolean)).
     - [IP_ADDR_V6: unbound variable on host w/o IPv6](https://github.com/zhuwenbing/porkbun-ddns/issues/1).
-4. 2022/5/20 - Release v1.0.0 version.
+5. 2022/5/20 - Release v1.0.0 version.
 
 ### Thanks:
 1. [Mr-Jos/namesilo_ddns_cli](https://github.com/Mr-Jos/namesilo_ddns_cli)
